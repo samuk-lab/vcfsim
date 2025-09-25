@@ -63,101 +63,106 @@ class MyVcfSim:
         return temp_array
     
     def row_changes(self, row, vcfdata, tempvcf):
-        uniquelist = []
-
         col_start = self.col_start
         col_end = self.col_end
         altlist = row[col_start:col_end+1].values
-        
-        randomsitemissing = round((self.percentsitemissing / 100) * (self.samp_num - 1))
 
+        #pick site missing samples
+        randomsitemissing = round((self.percentsitemissing / 100) * (self.samp_num - 1))
         randomsites = np.arange(1, self.samp_num)
         np.random.shuffle(randomsites)
         randomsites = randomsites[:randomsitemissing]
 
+        #temporarily set missing samples to all zeros genotype
         change = self.change_zero
-        
         for idx_site in randomsites:
             altlist[idx_site] = change
-        
-        refindex = 0
 
+        #refindex for old reference
+        refindex = 0
         if ((1 in randomsites) and ((self.percentsitemissing / 100) != 1)):
             for i in range(1, self.samp_num):
                 if i not in randomsites:
                     refindex = i * self.ploidy
                     break
-        
-        if (self.ploidy != 1):
+
+        #Parse ALT as alleles
+        alt_field = row['ALT']
+        alts = [] if alt_field == "." else alt_field.split(',')
+
+        #Flatten all allele integers from the row depending on ploidy
+        allele_codes = []
+        if self.ploidy != 1:
             for item in altlist:
-                new_items = item.split('|')
-                for x in new_items:
-                    uniquelist.append(int(x))
-        elif (self.ploidy == 1):
-            for x in altlist:
-                uniquelist.append(int(x))
-            
-        a = 'ALT'
-        alt_chars = row[a]
-        alt_chars = alt_chars.replace(',', '')
-        alt_chars = list(alt_chars)
-
-        referencegenome = uniquelist[refindex]
-        if (referencegenome != 0):
-            oldref = row['REF']
-            row['REF'] = alt_chars[referencegenome - 1]
-            removed_alt = alt_chars[referencegenome - 1]
-            alt_chars.remove(removed_alt)
-            alt_chars.append(oldref)
-
-            for i in range(len(uniquelist)):
-                if (uniquelist[i] == 0):
-                    uniquelist[i] = len(alt_chars)
-                elif (uniquelist[i] == referencegenome):
-                    uniquelist[i] = 0
-                elif (uniquelist[i] != 1):
-                    uniquelist[i] = uniquelist[i] - 1
-        
-        uniquelist = np.array(uniquelist, dtype=int)
-                    
-        finaloutput = uniquelist
-        unique_vals = np.unique(uniquelist)
-        
-        templist = []
-        for i in range(len(alt_chars)):
-            idx_val = i + 1
-            if (idx_val in unique_vals):
-                templist.append(alt_chars[i])
-        alt_chars = templist
-
-        if (len(alt_chars) == 0):
-            alt_str = "."
+                for x in item.split('|'):
+                    allele_codes.append(int(x))
         else:
-            alt_str = ','.join(alt_chars)
+            for x in altlist:
+                allele_codes.append(int(x))
 
-        row[a] = alt_str
+        #Determine which allele reference sample is
+        referencegenome = allele_codes[refindex]  # 0 = REF, >=1 = ALT index
 
-        if ((1 not in finaloutput) and (finaloutput.sum != 0)):
-            for i in range(len(finaloutput)):
-                if (finaloutput[i] > 1):
-                    finaloutput[i] = finaloutput[i] - 1
-                
+        #Change REF then remap all GTs
+        alleles = [row['REF']] + alts  #0=REF, OR 1,..,n=ALTs
+
+        if referencegenome != 0 and referencegenome < len(alleles):
+            new_ref = alleles[referencegenome]
+            old_ref = alleles[0]
+
+            #all old ALTs except new ref, plus old REF at end
+            new_alts = [alleles[i] for i in range(1, len(alleles)) if i != referencegenome]
+            new_alts.append(old_ref)
+
+            #Use disctionary to switch references/alts
+            index_map = {0: len(new_alts)}
+            index_map[referencegenome] = 0
+            for i in range(1, len(alleles)):
+                if i in index_map:
+                    continue
+                index_map[i] = i - 1 if i > referencegenome else i
+
+            mapped_codes = [index_map[c] for c in allele_codes]
+            row['REF'] = new_ref
+            curr_alts = new_alts
+        else:
+            mapped_codes = allele_codes[:]
+            curr_alts = alts[:]
+
+        #compact ALT indices and shrink ALT list accordingly
+        used_alts = sorted({c for c in mapped_codes if c >= 1})
+        compact_map = {0: 0}
+        for new_i, old_i in enumerate(used_alts, start=1):
+            compact_map[old_i] = new_i
+
+        mapped_codes = [compact_map[c] for c in mapped_codes]
+        compacted_alts = [curr_alts[i - 1] for i in used_alts]  # i>=1
+        row['ALT'] = "." if len(compacted_alts) == 0 else ",".join(compacted_alts)
+
+        #rebuild GT strings
         finaldata = []
-        for i in range(0, len(finaloutput), self.ploidy):
-            finaldata.append(finaloutput[i:i + self.ploidy])
-        finaldataoutput = []
-        for data in finaldata:
-            finaldataoutput.append("|".join(str(i) for i in data))
-        
-        change_missing_local = self.change_missing
+        for i in range(0, len(mapped_codes), self.ploidy):
+            finaldata.append(mapped_codes[i:i + self.ploidy])
+        finaldataoutput = ["|".join(str(i) for i in data) for data in finaldata]
+
+        #apply missing as '.|.,,,,|.' or '.' for ploidy = 1
         for idx_site in randomsites:
-            finaldataoutput[idx_site] = change_missing_local
-        
+            finaldataoutput[idx_site] = self.change_missing
+
+        #edge case of 100% site missing make all red '.'
         if ((self.percentsitemissing / 100) == 1):
             row['REF'] = '.'
-        
-        row[col_start:col_end+1] = finaldataoutput
 
+        max_alt_index = len(compacted_alts)
+        for gt in finaldataoutput:
+            if gt == self.change_missing:
+                continue
+            for a_code in gt.split('|'):
+                ai = int(a_code)
+                assert 0 <= ai <= max_alt_index, f"Illegal allele {ai} with ALT count {max_alt_index}"
+
+        #write columns back
+        row[col_start:col_end+1] = finaldataoutput
         return row
 
 
