@@ -10,7 +10,7 @@ import io
 class MyVcfSim:
     
     def __init__(self, chrom, site_size, ploidy, pop_num, mutationrate, percentmissing, percentsitemissing, randoseed, outputfile, samp_num, samp_file, folder, sample_names = None,
-                 population_mode = 2, time = 1000):
+                 population_mode = 2, time = 1000, hmm_baseline = None, hmm_multiplier = None, hmm_p_good_to_bad = None, hmm_p_bad_to_good = None):
 
         self.chrom = chrom
         self.site_size = site_size
@@ -26,6 +26,11 @@ class MyVcfSim:
         self.folder = folder
         self.population_mode = population_mode
         self.time = time
+        self.hmm_baseline = hmm_baseline
+        self.hmm_multiplier = hmm_multiplier
+        self.hmm_p_good_to_bad = hmm_p_good_to_bad
+        self.hmm_p_bad_to_good = hmm_p_bad_to_good
+
 
         # store custom names if provided
         if sample_names is not None:
@@ -47,20 +52,69 @@ class MyVcfSim:
 
         self.col_start = None
         self.col_end = None
+
+    def make_site_mask_hmm(self, p_base, multiplier, p_good_to_bad, p_bad_to_good):
+        n = self.site_size
+
+        #states are 0 for good and 1 for bad
+        states = np.zeros(n, dtype=int)
+
+        #start in good state
+        current_state = 0
+
+        for i in range(n):
+            states[i] = current_state
+            if current_state == 0:
+                if np.random.random() < p_good_to_bad:
+                    current_state = 1
+            else:
+                if np.random.random() < p_bad_to_good:
+                    current_state = 0
+
+        #now generate the missing data conditioned on the good or bad state
+        mask = np.zeros(n, dtype=int)
+
+        for i in range(n):
+            if states[i] == 0:
+                p = p_base
+            else:
+                p = p_base * multiplier
+
+            p = min(1.0, p) #if probability is somehow greater than 1 (maybe a large multiplier was put accidentally)
+            #we cap this at 1 so no weird stuff
+
+            if np.random.random() < p:
+                mask[i] = 1
+
+        return mask
+
     
     def make_site_mask(self):
-        temp_percent = self.percentmissing / 100
-        temp_var = self.site_size * temp_percent
 
-        temp_array = np.zeros(self.site_size, dtype=int)
+        #Generate site mask as we previously were
+        if self.percentmissing is not None:
+            temp_percent = self.percentmissing / 100
+            temp_var = self.site_size * temp_percent
 
-        k = round(temp_var)
-        if k > 0:
-            order = np.random.permutation(self.site_size)
-            missing_idx = order[:k]
-            temp_array[missing_idx] = 1
+            temp_array = np.zeros(self.site_size, dtype=int)
 
-        return temp_array
+            k = round(temp_var)
+            if k > 0:
+                order = np.random.permutation(self.site_size)
+                missing_idx = order[:k]
+                temp_array[missing_idx] = 1
+
+            return temp_array
+
+        #Generate site mask with our HMM
+        else:
+
+            p_base = self.hmm_baseline        #baseline missingness chance when in good state
+            multiplier = self.hmm_multiplier #missingness multiplier when in bad state
+            p_gb = self.hmm_p_good_to_bad     #chance of going from good state to bad state
+            p_bg = self.hmm_p_bad_to_good     #chance of going from bad state to good
+
+            return self.make_site_mask_hmm(p_base, multiplier, p_gb, p_bg)
     
     def row_changes(self, row, vcfdata, tempvcf):
         col_start = self.col_start

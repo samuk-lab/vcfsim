@@ -9,7 +9,7 @@ from IPython.display import SVG, display
 from .SimulatorClass import MyVcfSim
 import warnings
 
-def multiple_chrom(chromfilename = 'input.txt', seed = 1234, foldername = 'PixyFolder', percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000):
+def multiple_chrom(chromfilename = 'input.txt', seed = 1234, foldername = 'PixyFolder', percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000, hmm_baseline=None, hmm_multiplier=None, hmm_p_good_to_bad=None, hmm_p_bad_to_good=None):
     
     f = open(chromfilename, "r")
 
@@ -63,7 +63,7 @@ def multiple_chrom(chromfilename = 'input.txt', seed = 1234, foldername = 'PixyF
         sys.exit(0)
 
     for i in range(len(chromlist)):
-        sim = MyVcfSim(chromlist[i], lengthlist[i], ploidylist[i], nelist[i], mulist[i], percentmissing, percentsitemissing, seed, chromlist[i], samp_num, 'population.txt', 'vcf', sample_names, population_mode, time)
+        sim = MyVcfSim(chromlist[i], lengthlist[i], ploidylist[i], nelist[i], mulist[i], percentmissing, percentsitemissing, seed, chromlist[i], samp_num, 'population.txt', 'vcf', sample_names, population_mode, time, hmm_baseline, hmm_multiplier, hmm_p_good_to_bad, hmm_p_bad_to_good)
         
         sim.simulate_vcfs()
     
@@ -83,7 +83,7 @@ def multiple_chrom(chromfilename = 'input.txt', seed = 1234, foldername = 'PixyF
                 destination.writelines(lines[6:])
         os.remove(chromlist[i])
 
-def vcf_simulator(chrom = 1, amountofruns = 1, seed = 1234, foldername = 'PixyFolder', sitesize = 10000, ploidy = 2, population = 1700000, mutationrate = 0.0000000055, percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000):
+def vcf_simulator(chrom = 1, amountofruns = 1, seed = 1234, foldername = 'PixyFolder', sitesize = 10000, ploidy = 2, population = 1700000, mutationrate = 0.0000000055, percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000, hmm_baseline=None, hmm_multiplier=None, hmm_p_good_to_bad=None, hmm_p_bad_to_good=None):
     
     # when custom sample names are provided we set sample size from the names
     if sample_names is not None:
@@ -103,7 +103,7 @@ def vcf_simulator(chrom = 1, amountofruns = 1, seed = 1234, foldername = 'PixyFo
         else:
             outputfilename = 'None'
             
-        sim = MyVcfSim(chrom, sitesize, ploidy, population, mutationrate, percentmissing, percentsitemissing, seed, outputfilename, samp_num, 'population.txt', 'vcf', sample_names, population_mode, time)
+        sim = MyVcfSim(chrom, sitesize, ploidy, population, mutationrate, percentmissing, percentsitemissing, seed, outputfilename, samp_num, 'population.txt', 'vcf', sample_names, population_mode, time,  hmm_baseline, hmm_multiplier, hmm_p_good_to_bad, hmm_p_bad_to_good)
 
         sim.simulate_vcfs()
         seed+=1
@@ -123,8 +123,15 @@ def main():
     optional.add_argument('--ploidy', type=int, nargs = '?', help = 'Ploidy for your VCF', required = False)
     optional.add_argument('--Ne', type=int, nargs = '?', help = 'Effective population size of the simulated population', required = False)
     optional.add_argument('--mu',type=float, nargs = '?', help = 'Mutation rate in the simulated population', required = False)  
-    required.add_argument('--percent_missing_sites', type=int, nargs = '?', help = 'Percent of rows missing from your VCF', required = True) #percent missing sites   
-    required.add_argument('--percent_missing_genotypes', type=int, nargs = '?', help = 'Percent of samples missing from your VCF', required = True) #percent missing genotypes, percent of genotypes that are missing from samples    
+    required.add_argument('--percent_missing_sites', type=int, nargs = '?', help = 'Percent of rows missing from your VCF', required = False) #percent missing sites   
+    required.add_argument('--percent_missing_genotypes', type=int, nargs = '?', help = 'Percent of samples missing from your VCF', required = True) #percent missing genotypes, percent of genotypes that are missing from samples   
+
+    #HMM commands
+    optional.add_argument('--hmm_baseline', type=float, nargs='?', help='Baseline site missing probability in good regions', required=False) 
+    optional.add_argument('--hmm_multiplier', type=float, nargs='?', help='Multiplier for missingness in bad regions', required=False)
+    optional.add_argument('--hmm_p_good_to_bad', type=float, nargs='?', help='Probability of switching from good to bad region', required=False)
+    optional.add_argument('--hmm_p_bad_to_good', type=float, nargs='?', help='Probability of switching from bad to good region', required=False)
+ 
     optional.add_argument('--output_file', nargs = '?', help = 'Filename of outputed vcf, will automatically be followed by seed', required = False)    
 
     optional.add_argument('--chromosome_file', nargs = '?', help = 'Specified file for multiple chromosome inputs', required = False)
@@ -140,6 +147,33 @@ def main():
     sample_group.add_argument('--samples_file', nargs = '?', help = 'File with one whitespace separated line of sample names')
 
     args = parser.parse_args()
+
+
+    #HMM argument handling
+    hmm_args = [args.hmm_baseline, args.hmm_multiplier, args.hmm_p_good_to_bad, args.hmm_p_bad_to_good]
+
+    hmm_provided = any(x is not None for x in hmm_args)
+
+    #if percentmissing is provided and hmm params are also provided, warn and ignore HMM
+    if args.percent_missing_sites is not None and hmm_provided:
+        warnings.warn("Both --percent_missing_sites and HMM parameters were provided. Using deterministic percent missing. If you want HMM-based site missingness, don't include --percent_missing_sites.")
+
+    if args.percent_missing_sites is None:
+        if not hmm_provided:
+            raise ValueError("Error: Either --percent_missing_sites must be provided, or all four HMM parameters must be specified.")
+        if any(x is None for x in hmm_args):
+            raise ValueError("Error: All HMM parameters must be provided together (--hmm_baseline, --hmm_multiplier, --hmm_p_good_to_bad, --hmm_p_bad_to_good).")
+
+    #validate HMM parameter ranges
+    if hmm_provided:
+        if not (0 <= args.hmm_baseline <= 1):
+            raise ValueError("Error: --hmm_baseline must be between 0 and 1")
+        if args.hmm_multiplier < 1:
+            raise ValueError("Error: --hmm_multiplier must be >= 1")
+        if not (0 <= args.hmm_p_good_to_bad <= 1):
+            raise ValueError("Error: --hmm_p_good_to_bad must be between 0 and 1")
+        if not (0 <= args.hmm_p_bad_to_good <= 1):
+            raise ValueError("Error: --hmm_p_bad_to_good must be between 0 and 1")
 
     #read custom names if provided
     custom_names = None
@@ -211,7 +245,7 @@ def main():
         else:
             effective_samp_num = args.sample_size
 
-        multiple_chrom(chromfilename = args.chromosome_file, seed = args.seed, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = effective_samp_num, sample_names = custom_names, population_mode = population_mode, time = time_value)
+        multiple_chrom(chromfilename = args.chromosome_file, seed = args.seed, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = effective_samp_num, sample_names = custom_names, population_mode = population_mode, time = time_value, hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_good_to_bad, hmm_p_bad_to_good=args.hmm_p_bad_to_good)
     
     elif (args.chromosome_file is None and (args.chromosome is None or args.replicates is None or args.sequence_length is None
                                       or args.ploidy is None or args.Ne is None or args.mu is None)):
@@ -229,7 +263,7 @@ def main():
         print("Error: Output_file must be a string")
         
     else:
-        vcf_simulator(chrom = args.chromosome , amountofruns = args.replicates, seed = args.seed, sitesize = args.sequence_length, ploidy = args.ploidy, population = args.Ne, mutationrate = args.mu, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = args.sample_size, sample_names = custom_names, population_mode = population_mode, time = time_value)
+        vcf_simulator(chrom = args.chromosome , amountofruns = args.replicates, seed = args.seed, sitesize = args.sequence_length, ploidy = args.ploidy, population = args.Ne, mutationrate = args.mu, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = args.sample_size, sample_names = custom_names, population_mode = population_mode, time = time_value,  hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_good_to_bad, hmm_p_bad_to_good=args.hmm_p_bad_to_good)
     
     #argument checker after to double check
     
