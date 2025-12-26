@@ -81,7 +81,7 @@ NOTE: An output file doesn't needed to be specified. If no output file is specif
 Screenshot of output file:
 <img width="1437" height="458" alt="Image" src="https://github.com/user-attachments/assets/11078b68-6a62-44e0-bf8d-87c34544b2a6" />
 
-## Using Hidden Markov Model Parameters
+### Using Hidden Markov Model Parameters
 Instead of specifying `--percent_missing_sites`, which produces uniform deterministic missingness across sites, you can instead specify the following Hidden Markov Model (HMM) parameters to introduce more spatially clustered missing data. Note that when missingness is introduced in this manner, the exact proportion of missing sites is stochastic and will vary between runs, but this missingness can still be approximately determined based on the chosen parameter values.
 
 All four HMM parameters must be specified together when using this option.
