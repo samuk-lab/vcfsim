@@ -81,6 +81,17 @@ NOTE: An output file doesn't needed to be specified. If no output file is specif
 Screenshot of output file:
 <img width="1437" height="458" alt="Image" src="https://github.com/user-attachments/assets/11078b68-6a62-44e0-bf8d-87c34544b2a6" />
 
+## Using Hidden Markov Model Parameters
+Instead of specifying `--percent_missing_sites`, which produces uniform deterministic missingness across sites, you can instead specify the following Hidden Markov Model (HMM) parameters to introduce more spatially clustered missing data. Note that when missingness is introduced in this manner, the exact proportion of missing sites is stochastic and will vary between runs, but this missingness can still be approximately determined based on the chosen parameter values.
+
+All four HMM parameters must be specified together when using this option.
+
+```shell
+python3 __main__.py --chromosome 1 --replicates 1 --seed 4000 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu 0.000001 --percent_missing_genotypes 0 --hmm_baseline 0.05 --hmm_multiplier 6 --hmm_p_good_to_bad 0.002 --hmm_p_bad_to_good 0.005 --output_file myvcf_hmm_high_seed4000 --sample_size 10
+```
+To do this, sites transition between low-missing (good) and high-missing (bad) states according to a two-state Markov process. Sites in bad regions have a higher probability of being missing.
+
+
 ### Using custom sample names
 Instead of `--sample_size`, you can provide explicit sample names:  
 
