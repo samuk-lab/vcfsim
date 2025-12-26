@@ -87,7 +87,7 @@ Instead of specifying `--percent_missing_sites`, which produces uniform determin
 All four HMM parameters must be specified together when using this option.
 
 ```shell
-python3 __main__.py --chromosome 1 --replicates 1 --seed 4000 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu 0.000001 --percent_missing_genotypes 0 --hmm_baseline 0.05 --hmm_multiplier 6 --hmm_p_good_to_bad 0.002 --hmm_p_bad_to_good 0.005 --output_file myvcf --sample_size 10
+vcfsim --chromosome 1 --replicates 1 --seed 4000 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu 0.000001 --percent_missing_genotypes 0 --hmm_baseline 0.05 --hmm_multiplier 6 --hmm_p_good_to_bad 0.002 --hmm_p_bad_to_good 0.005 --output_file myvcf --sample_size 10
 ```
 To do this, sites transition between low-missing (good) and high-missing (bad) states according to a two-state Markov process. Sites in bad regions have a higher probability of being missing.
 
