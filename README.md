@@ -56,7 +56,7 @@ One of the following three options must also be provided to set the samples:
 
 --time [TIME] Split time for population mode 2 (e.g. generations before present). Required if --population_mode 2 is specified.
 
-Instead of specifying --percent_missing_sites [PERCENT_MISSING_SITES], which produces uniform deterministic missingness across sites, we also provide a more advanced option that uses a Hidden Markov Model (HMM). By leaving --percent_missing_sites blank, users may instead provide the following parameters to allow site-level missingness to be spatially clustered (see bwlow for details):
+Instead of specifying --percent_missing_sites [PERCENT_MISSING_SITES], which produces uniform deterministic missingness across sites, we also provide a more advanced option that uses a Hidden Markov Model (HMM). By leaving --percent_missing_sites blank, users may instead provide the following parameters to allow site-level missingness to be spatially clustered (see bwlow for details) In the case that this option is used rather than the --percent_missing_sites parameter, all four HMM parameters must be specified:
 
 --hmm_baseline [HMM_BASELINE] Baseline probability of site missingness when in a low-missing (good) state
 
