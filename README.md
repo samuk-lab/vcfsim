@@ -56,6 +56,16 @@ One of the following three options must also be provided to set the samples:
 
 --time [TIME] Split time for population mode 2 (e.g. generations before present). Required if --population_mode 2 is specified.
 
+Instead of specifying --percent_missing_sites [PERCENT_MISSING_SITES], which produces uniform deterministic missingness across sites, we also provide a more advanced option that uses a Hidden Markov Model (HMM). By leaving --percent_missing_sites blank, users may instead provide the following parameters to allow site-level missingness to be spatially clustered (see bwlow for details):
+
+--hmm_baseline [HMM_BASELINE] Baseline probability of site missingness when in a low-missing (good) state
+
+--hmm_multiplier [HMM_MULTIPLIER] Multiplier applied to the baseline missingness probability when in a high-missing (bad) state
+
+--hmm_p_good_to_bad [HMM_P_GOOD_TO_BAD] Probability of switching from a good state to a bad state
+
+--hmm_p_bad_to_good [HMM_P_BAD_TO_GOOD] Probability of switching from a bad state to a good state
+
 ## Usage
 Typical usage for vcfsim is as follows:
 
