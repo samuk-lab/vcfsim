@@ -326,9 +326,9 @@ class MyVcfSim:
             #We intentionally *do not* simulate samples from C (the ancestral population)
             #This ensures that all samples come from the derived populations A and B
 
-            nA = self.samp_num // 2  #Half of the samples (rounded down) from population A
-            nB = self.samp_num - nA  #The remaining samples from population B
-            samples = [msprime.SampleSet(nA, population="A", ploidy=self.ploidy), msprime.SampleSet(nB, population="B", ploidy=self.ploidy)]
+            nA = (self.samp_num-1) // 2  #Half of the samples (rounded down) from population A
+            nB = (self.samp_num-1) - nA  #The remaining samples from population B
+            samples = [msprime.SampleSet(nA+1, population="A", ploidy=self.ploidy), msprime.SampleSet(nB, population="B", ploidy=self.ploidy)]
             
             ts = msprime.sim_ancestry(samples=samples, demography=demography, random_seed=self.randoseed, sequence_length=self.site_size)
 
