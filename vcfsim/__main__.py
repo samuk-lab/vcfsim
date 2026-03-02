@@ -129,15 +129,15 @@ def main():
     #HMM commands
     optional.add_argument('--hmm_baseline', type=float, nargs='?', help='Baseline site missing probability in good regions', required=False) 
     optional.add_argument('--hmm_multiplier', type=float, nargs='?', help='Multiplier for missingness in bad regions', required=False)
-    optional.add_argument('--hmm_p_good_to_bad', type=float, nargs='?', help='Probability of switching from good to bad region', required=False)
-    optional.add_argument('--hmm_p_bad_to_good', type=float, nargs='?', help='Probability of switching from bad to good region', required=False)
+    optional.add_argument('--hmm_p_low_to_high', type=float, nargs='?', help='Probability of switching from a low-missing state to a high-missing state', required=False)
+    optional.add_argument('--hmm_p_high_to_low', type=float, nargs='?', help='Probability of switching from a high-missing state to a low-missing state', required=False)
  
     optional.add_argument('--output_file', nargs = '?', help = 'Filename of outputed vcf, will automatically be followed by seed', required = False)    
 
     optional.add_argument('--chromosome_file', nargs = '?', help = 'Specified file for multiple chromosome inputs', required = False)
 
     optional.add_argument('--population_mode', type=int, nargs='?', help='1 = single population (default), 2 = population C splits into A and B at given time', required=False)
-    optional.add_argument('--time', type=int, nargs='?', help='Time of split (only used if --population_mode is 2)', required=False)
+    optional.add_argument('--div_time', type=int, nargs='?', help='Divergence time of split (only used if --population_mode is 2)', required=False)
 
     #choose one way to specify samples
     #either a numeric sample size or explicit names or a file of names
@@ -150,7 +150,7 @@ def main():
 
 
     #HMM argument handling
-    hmm_args = [args.hmm_baseline, args.hmm_multiplier, args.hmm_p_good_to_bad, args.hmm_p_bad_to_good]
+    hmm_args = [args.hmm_baseline, args.hmm_multiplier, args.hmm_p_low_to_high, args.hmm_p_high_to_low]
 
     hmm_provided = any(x is not None for x in hmm_args)
 
@@ -162,7 +162,7 @@ def main():
         if not hmm_provided:
             raise ValueError("Error: Either --percent_missing_sites must be provided, or all four HMM parameters must be specified.")
         if any(x is None for x in hmm_args):
-            raise ValueError("Error: All HMM parameters must be provided together (--hmm_baseline, --hmm_multiplier, --hmm_p_good_to_bad, --hmm_p_bad_to_good).")
+            raise ValueError("Error: All HMM parameters must be provided together (--hmm_baseline, --hmm_multiplier, --hmm_p_low_to_high, --hmm_p_high_to_low).")
 
     #validate HMM parameter ranges
     if hmm_provided:
@@ -170,10 +170,10 @@ def main():
             raise ValueError("Error: --hmm_baseline must be between 0 and 1")
         if args.hmm_multiplier < 1:
             raise ValueError("Error: --hmm_multiplier must be >= 1")
-        if not (0 <= args.hmm_p_good_to_bad <= 1):
-            raise ValueError("Error: --hmm_p_good_to_bad must be between 0 and 1")
-        if not (0 <= args.hmm_p_bad_to_good <= 1):
-            raise ValueError("Error: --hmm_p_bad_to_good must be between 0 and 1")
+        if not (0 <= args.hmm_p_low_to_high <= 1):
+            raise ValueError("Error: --hmm_p_low_to_high must be between 0 and 1")
+        if not (0 <= args.hmm_p_high_to_low <= 1):
+            raise ValueError("Error: --hmm_p_high_to_low must be between 0 and 1")
 
     #read custom names if provided
     custom_names = None
@@ -225,8 +225,8 @@ def main():
     else:
         population_mode = 1
 
-    if args.time is not None:
-        time_value = args.time
+    if args.div_time is not None:
+        time_value = args.div_time
     else:
         time_value = 1000 #We pass dummy time value if population_mode is 1 to avoid error, however this doesn't effect performance in any way
         if(population_mode == 2):
@@ -245,7 +245,7 @@ def main():
         else:
             effective_samp_num = args.sample_size
 
-        multiple_chrom(chromfilename = args.chromosome_file, seed = args.seed, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = effective_samp_num, sample_names = custom_names, population_mode = population_mode, time = time_value, hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_good_to_bad, hmm_p_bad_to_good=args.hmm_p_bad_to_good)
+        multiple_chrom(chromfilename = args.chromosome_file, seed = args.seed, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = effective_samp_num, sample_names = custom_names, population_mode = population_mode, time = time_value, hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_low_to_high, hmm_p_bad_to_good=args.hmm_p_high_to_low)
     
     elif (args.chromosome_file is None and (args.chromosome is None or args.replicates is None or args.sequence_length is None
                                       or args.ploidy is None or args.Ne is None or args.mu is None)):
@@ -263,7 +263,7 @@ def main():
         print("Error: Output_file must be a string")
         
     else:
-        vcf_simulator(chrom = args.chromosome , amountofruns = args.replicates, seed = args.seed, sitesize = args.sequence_length, ploidy = args.ploidy, population = args.Ne, mutationrate = args.mu, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = args.sample_size, sample_names = custom_names, population_mode = population_mode, time = time_value,  hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_good_to_bad, hmm_p_bad_to_good=args.hmm_p_bad_to_good)
+        vcf_simulator(chrom = args.chromosome , amountofruns = args.replicates, seed = args.seed, sitesize = args.sequence_length, ploidy = args.ploidy, population = args.Ne, mutationrate = args.mu, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = args.sample_size, sample_names = custom_names, population_mode = population_mode, time = time_value,  hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_low_to_high, hmm_p_bad_to_good=args.hmm_p_high_to_low)
     
     #argument checker after to double check
     
