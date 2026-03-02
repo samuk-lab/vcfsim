@@ -54,7 +54,7 @@ One of the following three options must also be provided to set the samples:
 
 --population_mode [1|2] Number of populations simulate. 1 = single population (default), 2 = two populations with a shared history (C splits into A & B).
 
---time [TIME] Split time for population mode 2 (e.g. generations before present). Required if --population_mode 2 is specified.
+--div_time [TIME] Split divergence time for population mode 2 (e.g. generations before present). Required if --population_mode 2 is specified.
 
 Instead of specifying --percent_missing_sites [PERCENT_MISSING_SITES], which produces uniform deterministic missingness across sites, we also provide a more advanced option that uses a Hidden Markov Model (HMM). By leaving --percent_missing_sites blank, users may instead provide the following parameters to allow site-level missingness to be spatially clustered (see bwlow for details). In the case that this option is used rather than the --percent_missing_sites parameter, all four HMM parameters must be specified:
 
@@ -62,9 +62,9 @@ Instead of specifying --percent_missing_sites [PERCENT_MISSING_SITES], which pro
 
 --hmm_multiplier [HMM_MULTIPLIER] Multiplier applied to the baseline missingness probability when in a high-missing (bad) state
 
---hmm_p_good_to_bad [HMM_P_GOOD_TO_BAD] Probability of switching from a good state to a bad state
+--hmm_p_low_to_high [HMM_P_LOW_TO_HIGH] Probability of switching from a low-missing state to a high-missing state
 
---hmm_p_bad_to_good [HMM_P_BAD_TO_GOOD] Probability of switching from a bad state to a good state
+--hmm_p_high_to_low [HMM_P_HIGH_TO_LOW] Probability of switching from a high-missing state to a low-missing state
 
 ## Usage
 Typical usage for vcfsim is as follows:
@@ -87,7 +87,7 @@ Instead of specifying `--percent_missing_sites`, which produces uniform determin
 All four HMM parameters must be specified together when using this option.
 
 ```shell
-vcfsim --chromosome 1 --replicates 1 --seed 4000 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu 0.000001 --percent_missing_genotypes 0 --hmm_baseline 0.05 --hmm_multiplier 6 --hmm_p_good_to_bad 0.002 --hmm_p_bad_to_good 0.005 --output_file myvcf --sample_size 10
+vcfsim --chromosome 1 --replicates 1 --seed 4000 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu 0.000001 --percent_missing_genotypes 0 --hmm_baseline 0.05 --hmm_multiplier 6 --hmm_p_low_to_high 0.002 --hmm_p_high_to_low 0.005 --output_file myvcf --sample_size 10
 ```
 To do this, sites transition between low-missing (good) and high-missing (bad) states according to a two-state Markov process. Sites in bad regions have a higher probability of being missing.
 
@@ -119,7 +119,7 @@ Otherwise, sample identifiers will default to tsk_0,...,tsk_n
 To simulate a demographic split between populations A and B from an ancestral population C:
 
 ```shell
-vcfsim --chromosome 1 --replicates 1 --seed 1234 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu .000001 --percent_missing_sites 0 --percent_missing_genotypes 0 --output_file myvcf --sample_size 10 --population_mode 2 --time 1000
+vcfsim --chromosome 1 --replicates 1 --seed 1234 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu .000001 --percent_missing_sites 0 --percent_missing_genotypes 0 --output_file myvcf --sample_size 10 --population_mode 2 --div_time 1000
 ```
 
 ### Multiple chromosome inputs
