@@ -1,5 +1,5 @@
 # vcfsim <img align="right" width="160" src="https://github.com/user-attachments/assets/228cfba0-bec0-4b74-8010-412d0f184417">
-vcfsim is a command-line tool for generating simulated VCF's (variant call format files for encoding genetic data). It combines a coalescent simulation backend (msprime) with clean and efficient postprocessing to produce a wide variety of biologically realistic VCFs, with parameterized levels of missing data. Realistic VCF's can now be easily simulated with just a few command line arguments!
+vcfsim is a command-line tool for generating simulated VCF's (variant call format files for encoding genetic data). It combines a coalescent simulation backend (msprime) with clean and efficient postprocessing to produce a wide variety of biologically realistic VCFs, with parameterized levels of missing data. Realistic VCF's can now be easily simulated with just a few command line arguments! In particular, vcfsim allows the creation "all-sites" VCFs, that contain both variant and invariant sites.
 
 ## Authors 
 Paimon Goulart (UC Riverside), Kieran Samuk (UC Riverside)
