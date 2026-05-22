@@ -4,7 +4,6 @@ import pandas as pd
 import sys
 import os
 import time
-from IPython.display import SVG, display
 import io
 
 class MyVcfSim:
@@ -203,10 +202,6 @@ class MyVcfSim:
         for idx_site in randomsites:
             finaldataoutput[idx_site] = self.change_missing
 
-        #edge case of 100% site missing make all red '.'
-        if ((self.percentsitemissing / 100) == 1):
-            row['REF'] = '.'
-
         max_alt_index = len(compacted_alts)
         for gt in finaldataoutput:
             if gt == self.change_missing:
@@ -225,7 +220,7 @@ class MyVcfSim:
         site_mask = self.make_site_mask()
 
         buf = io.StringIO()
-        ts.write_vcf(buf, site_mask=site_mask)
+        ts.write_vcf(buf, site_mask=site_mask, position_transform="legacy")
         buf.seek(0)
 
         header_lines = []
@@ -257,7 +252,6 @@ class MyVcfSim:
         vcfdata = vcfdata.apply(self.row_changes, axis = 1, args = (vcfdata, tempvcf))
  
         vcfdata["CHROM"] = self.chrom
-        vcfdata["POS"] = vcfdata["POS"] + 1
         vcfdata["ID"] = '.'
 
         if ("tsk_0" in vcfdata.columns):
@@ -297,7 +291,7 @@ class MyVcfSim:
                 fout.write('#')
                 fout.write(csv_text)
         else:
-            display(vcfdata.to_string())
+            print(vcfdata.to_string())
         
     def make_population_file(self):
         np.random.seed(self.randoseed)
@@ -332,15 +326,15 @@ class MyVcfSim:
             
             ts = msprime.sim_ancestry(samples=samples, demography=demography, random_seed=self.randoseed, sequence_length=self.site_size)
 
-        rlg = np.random.default_rng(self.randoseed)
-        rchar = rlg.integers(low=0, high=4)
-
         difference_counter = range(self.site_size)
 
         tables = ts.dump_tables()
 
+        rlg = np.random.default_rng(self.randoseed)
+        ancestral_bases = rlg.choice(np.array(["A", "C", "G", "T"]), size=self.site_size)
+
         for x in difference_counter:
-            tables.sites.add_row(x, "A")
+            tables.sites.add_row(x, ancestral_bases[x])
 
         ts = tables.tree_sequence()
         ts = msprime.sim_mutations(ts, rate=self.mutationrate, random_seed=self.randoseed)

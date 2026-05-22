@@ -32,8 +32,8 @@ Here is the list of required/optional arguments to run vcfsim
 
 One of the following three options must also be provided to set the samples:  
 - --sample_size [SAMPLE_SIZE] Amount of samples from population in VCF  
-- --samples [SAMPLES ...] Custom sample names, space separated (e.g. A1 B1 C1)  
-- --samples_file [SAMPLES_FILE] File containing one whitespace separated line of custom sample names  
+- --samples [SAMPLES ...] Custom sample names, comma or space separated (e.g. A1 B1 C1 or A1,B1,C1)
+- --samples_file [SAMPLES_FILE] File containing comma or whitespace separated custom sample names
 
 ### Optional
 --chromosome [CHROMOSOME] Chromosome name/label  
@@ -101,7 +101,7 @@ vcfsim --chromosome 1 --replicates 1 --seed 1234 --sequence_length 10000 --ploid
 
 This will automatically set the sample size to 4 and label the VCF columns `A1 B1 C1 D1`.  
 
-You can also read the names from a file containing a single whitespace separated line:  
+You can also read the names from a file containing comma or whitespace separated names:
 
 ```shell
 vcfsim --chromosome 1 --replicates 1 --seed 1234 --sequence_length 10000 --ploidy 2 --Ne 100000 --mu .000001 --percent_missing_sites 0 --percent_missing_genotypes 0 --output_file myvcf --samples_file names.txt
