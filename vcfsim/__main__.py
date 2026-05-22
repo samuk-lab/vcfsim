@@ -5,7 +5,6 @@ import sys
 import os
 import time
 import argparse
-from IPython.display import SVG, display
 from .SimulatorClass import MyVcfSim
 import warnings
 
@@ -143,8 +142,8 @@ def main():
     #either a numeric sample size or explicit names or a file of names
     sample_group = parser.add_mutually_exclusive_group(required = True)
     sample_group.add_argument('--sample_size', type = int, nargs = '?', help = 'Amount of samples from population in VCF')
-    sample_group.add_argument('--samples', nargs = '*', help = 'Custom sample names space separated')
-    sample_group.add_argument('--samples_file', nargs = '?', help = 'File with one whitespace separated line of sample names')
+    sample_group.add_argument('--samples', nargs = '*', help = 'Custom sample names, comma or space separated')
+    sample_group.add_argument('--samples_file', nargs = '?', help = 'File with comma or whitespace separated sample names')
 
     args = parser.parse_args()
 
@@ -181,15 +180,9 @@ def main():
     if args.samples_file is not None:
         try:
             with open(args.samples_file, 'r') as sf:
-                line = sf.readline().strip()
+                content = sf.read().strip()
 
-            #Check if it's a comma separated list
-            if ',' not in line:
-                raise ValueError("Error: Sample names in the file must be comma-separated (e.g., A1,B1,C1)")
-
-            #Convert to space separated string and split into list
-            line = line.replace(',', ' ')
-            tokens = line.split()
+            tokens = content.replace(',', ' ').split()
 
             if len(tokens) < 1:
                 print('Error: samples file must contain at least one name')
@@ -201,14 +194,17 @@ def main():
             print(f'Error reading samples file: {e}')
             sys.exit(0)
 
-    elif args.samples is not None and len(args.samples) > 0:
-        #Validate that the input is a single comma separated string
-        if len(args.samples) == 1 and ',' in args.samples[0]:
-            args.samples = args.samples[0].replace(',', ' ').split()
-        elif len(args.samples) > 1:
-            raise ValueError("Error: --samples must be passed as a single comma-separated string (e.g., A1,B1,C1)")
+    elif args.samples is not None:
+        tokens = []
+        for sample_arg in args.samples:
+            tokens.extend(sample_arg.replace(',', ' ').split())
 
-        custom_names = args.samples
+        if len(tokens) < 1:
+            print('Error: samples list must contain at least one name')
+            sys.exit(0)
+
+        args.samples = tokens
+        custom_names = tokens
 
     if args.population_mode is not None:
         
@@ -267,5 +263,5 @@ def main():
     
     #argument checker after to double check
     
-warnings.filterwarnings("ignore")
-main()
+if __name__ == "__main__":
+    main()
