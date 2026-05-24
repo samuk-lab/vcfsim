@@ -1,13 +1,13 @@
-{% set name = "VCFSimulator-SamukLab" %}
-{% set version = "1.0.2-alpha" %}
+{% set name = "vcfsim" %}
+{% set version = "1.0.29.alpha" %}
 
 package:
   name: {{ name|lower }}
   version: {{ version }}
 
 source:
-  url: https://github.com/Pie115/VCFSimulator-SamukLab/archive/{{ version }}.tar.gz
-  sha256: fae92d63c0138f6bb0cc1848abd83382cdb4ee947ddadd9dd312b3c208429d6d
+  url: https://github.com/samuk-lab/vcfsim/archive/{{ version }}.tar.gz
+  sha256: fae92d63c0138f6bb0cc1848abd83382cdb4ee947ddadd9dd312b3c208429d6d  # update for each release
 
 build:
   entry_points:
@@ -22,9 +22,9 @@ requirements:
     - pip
   run:
     - python
-    - pandas
     - numpy
     - msprime
+    - tskit
 
 test:
   imports:
@@ -36,7 +36,7 @@ test:
     - pip
 
 about:
-  home: https://github.com/Pie115/VCFSimulator-SamukLab
+  home: https://github.com/samuk-lab/vcfsim
   license: MIT
   license_file: LICENSE.txt
 

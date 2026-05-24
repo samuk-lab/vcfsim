@@ -1,13 +1,11 @@
 import msprime
 import numpy as np
-import pandas as pd
 import sys
-import os
-import time
 import io
 
+
 class MyVcfSim:
-    
+
     def __init__(self, chrom, site_size, ploidy, pop_num, mutationrate, percentmissing, percentsitemissing, randoseed, outputfile, samp_num, samp_file, folder, sample_names = None,
                  population_mode = 2, time = 1000, hmm_baseline = None, hmm_multiplier = None, hmm_p_good_to_bad = None, hmm_p_bad_to_good = None):
 
@@ -30,7 +28,6 @@ class MyVcfSim:
         self.hmm_p_good_to_bad = hmm_p_good_to_bad
         self.hmm_p_bad_to_good = hmm_p_bad_to_good
 
-
         # store custom names if provided
         if sample_names is not None:
             self.sample_names = list(sample_names)
@@ -38,21 +35,10 @@ class MyVcfSim:
             self.sample_names = None
 
         # prebuild small strings used many times
-        change_list_zero = []
-        for i in range(self.ploidy):
-            change_list_zero.append('0')
         joiner_temp = '|'
-        self.change_zero = joiner_temp.join(change_list_zero)
+        self.change_missing = joiner_temp.join(['.' for _ in range(self.ploidy)])
 
-        change_list_missing = []
-        for i in range(self.ploidy):
-            change_list_missing.append('.')
-        self.change_missing = joiner_temp.join(change_list_missing)
-
-        self.col_start = None
-        self.col_end = None
-
-    def make_site_mask_hmm(self, p_base, multiplier, p_good_to_bad, p_bad_to_good):
+    def make_site_mask_hmm(self, p_base, multiplier, p_good_to_bad, p_bad_to_good, rng):
         n = self.site_size
 
         #states are 0 for good and 1 for bad
@@ -64,10 +50,10 @@ class MyVcfSim:
         for i in range(n):
             states[i] = current_state
             if current_state == 0:
-                if np.random.random() < p_good_to_bad:
+                if rng.random() < p_good_to_bad:
                     current_state = 1
             else:
-                if np.random.random() < p_bad_to_good:
+                if rng.random() < p_bad_to_good:
                     current_state = 0
 
         #now generate the missing data conditioned on the good or bad state
@@ -82,13 +68,13 @@ class MyVcfSim:
             p = min(1.0, p) #if probability is somehow greater than 1 (maybe a large multiplier was put accidentally)
             #we cap this at 1 so no weird stuff
 
-            if np.random.random() < p:
+            if rng.random() < p:
                 mask[i] = 1
 
         return mask
 
-    
-    def make_site_mask(self):
+
+    def make_site_mask(self, rng):
 
         #Generate site mask as we previously were
         if self.percentmissing is not None:
@@ -99,7 +85,7 @@ class MyVcfSim:
 
             k = round(temp_var)
             if k > 0:
-                order = np.random.permutation(self.site_size)
+                order = rng.permutation(self.site_size)
                 missing_idx = order[:k]
                 temp_array[missing_idx] = 1
 
@@ -113,186 +99,117 @@ class MyVcfSim:
             p_gb = self.hmm_p_good_to_bad     #chance of going from good state to bad state
             p_bg = self.hmm_p_bad_to_good     #chance of going from bad state to good
 
-            return self.make_site_mask_hmm(p_base, multiplier, p_gb, p_bg)
-    
-    def row_changes(self, row, vcfdata, tempvcf):
-        col_start = self.col_start
-        col_end = self.col_end
-        altlist = row[col_start:col_end+1].values
-
-        #pick site missing samples
-        randomsitemissing = round((self.percentsitemissing / 100) * (self.samp_num - 1))
-        randomsites = np.arange(1, self.samp_num)
-        np.random.shuffle(randomsites)
-        randomsites = randomsites[:randomsitemissing]
-
-        #temporarily set missing samples to all zeros genotype
-        change = self.change_zero
-        for idx_site in randomsites:
-            altlist[idx_site] = change
-
-        #refindex for old reference
-        refindex = 0
-        if ((1 in randomsites) and ((self.percentsitemissing / 100) != 1)):
-            for i in range(1, self.samp_num):
-                if i not in randomsites:
-                    refindex = i * self.ploidy
-                    break
-
-        #Parse ALT as alleles
-        alt_field = row['ALT']
-        alts = [] if alt_field == "." else alt_field.split(',')
-
-        #Flatten all allele integers from the row depending on ploidy
-        allele_codes = []
-        if self.ploidy != 1:
-            for item in altlist:
-                for x in item.split('|'):
-                    allele_codes.append(int(x))
-        else:
-            for x in altlist:
-                allele_codes.append(int(x))
-
-        #Determine which allele reference sample is
-        referencegenome = allele_codes[refindex]  # 0 = REF, >=1 = ALT index
-
-        #Change REF then remap all GTs
-        alleles = [row['REF']] + alts  #0=REF, OR 1,..,n=ALTs
-
-        if referencegenome != 0 and referencegenome < len(alleles):
-            new_ref = alleles[referencegenome]
-            old_ref = alleles[0]
-
-            #all old ALTs except new ref, plus old REF at end
-            new_alts = [alleles[i] for i in range(1, len(alleles)) if i != referencegenome]
-            new_alts.append(old_ref)
-
-            #Use disctionary to switch references/alts
-            index_map = {0: len(new_alts)}
-            index_map[referencegenome] = 0
-            for i in range(1, len(alleles)):
-                if i in index_map:
-                    continue
-                index_map[i] = i - 1 if i > referencegenome else i
-
-            mapped_codes = [index_map[c] for c in allele_codes]
-            row['REF'] = new_ref
-            curr_alts = new_alts
-        else:
-            mapped_codes = allele_codes[:]
-            curr_alts = alts[:]
-
-        #compact ALT indices and shrink ALT list accordingly
-        used_alts = sorted({c for c in mapped_codes if c >= 1})
-        compact_map = {0: 0}
-        for new_i, old_i in enumerate(used_alts, start=1):
-            compact_map[old_i] = new_i
-
-        mapped_codes = [compact_map[c] for c in mapped_codes]
-        compacted_alts = [curr_alts[i - 1] for i in used_alts]  # i>=1
-        row['ALT'] = "." if len(compacted_alts) == 0 else ",".join(compacted_alts)
-
-        #rebuild GT strings
-        finaldata = []
-        for i in range(0, len(mapped_codes), self.ploidy):
-            finaldata.append(mapped_codes[i:i + self.ploidy])
-        finaldataoutput = ["|".join(str(i) for i in data) for data in finaldata]
-
-        #apply missing as '.|.,,,,|.' or '.' for ploidy = 1
-        for idx_site in randomsites:
-            finaldataoutput[idx_site] = self.change_missing
-
-        max_alt_index = len(compacted_alts)
-        for gt in finaldataoutput:
-            if gt == self.change_missing:
-                continue
-            for a_code in gt.split('|'):
-                ai = int(a_code)
-                assert 0 <= ai <= max_alt_index, f"Illegal allele {ai} with ALT count {max_alt_index}"
-
-        #write columns back
-        row[col_start:col_end+1] = finaldataoutput
-        return row
-
+            return self.make_site_mask_hmm(p_base, multiplier, p_gb, p_bg, rng)
 
     def make_missing_vcf(self, ts):
-        np.random.seed(self.randoseed)
-        site_mask = self.make_site_mask()
+        rng = np.random.default_rng(self.randoseed)
+        site_mask = self.make_site_mask(rng)
 
-        buf = io.StringIO()
-        ts.write_vcf(buf, site_mask=site_mask, position_transform="legacy")
-        buf.seek(0)
+        # get VCF header from tskit via a zero-site stub tree sequence.
+        # stripping all sites/mutations lets write_vcf() produce only the header
+        stub_tables = ts.dump_tables()
+        stub_tables.sites.clear()
+        stub_tables.mutations.clear()
+        stub_ts = stub_tables.tree_sequence()
+        hdr_buf = io.StringIO()
+        stub_ts.write_vcf(hdr_buf, position_transform="legacy")
+        hdr_buf.seek(0)
+        raw = list(hdr_buf)
+        # raw[-1] is the #CHROM line; raw[:-1] are the ##... meta lines
+        col_parts  = raw[-1].rstrip('\n').split('\t')
+        fixed_cols = col_parts[:9]   # '#CHROM' … 'FORMAT'
+        samp_cols  = col_parts[10:]  # skip tsk_0 (index 9)
+        if self.sample_names is not None:
+            samp_cols = list(self.sample_names)
+        header_text = ''.join(raw[:-1]) + '\t'.join(fixed_cols + samp_cols) + '\n'
 
-        header_lines = []
-        data_lines = []
+        # precompute all per-site missing-sample selections in one NumPy call.
+        # using argpartition avoids calling the rando-generator once per site in the loop!
+        n_real     = self.samp_num - 1
+        k_missing  = round((self.percentsitemissing / 100) * n_real)
+        n_included = int(np.sum(site_mask == 0))
 
-        linenum = 1
-        for line in buf:
-            if (linenum <= 5):
-                header_lines.append(line)
-            else:
-                if (linenum == 6):
-                    line = line[1:]
-                data_lines.append(line)
-            linenum = linenum + 1
-
-        body_buf = io.StringIO()
-        for line in data_lines:
-            body_buf.write(line)
-        body_buf.seek(0)
-
-        vcfdata = pd.read_csv(body_buf, delimiter = '\t')
-        
-        a = 'tsk_0'
-        self.col_start = vcfdata.columns.get_loc(a)
-        self.col_end = vcfdata.columns.get_loc(f"tsk_{self.samp_num - 1}")
-        
-        tempvcf = vcfdata
-        
-        vcfdata = vcfdata.apply(self.row_changes, axis = 1, args = (vcfdata, tempvcf))
- 
-        vcfdata["CHROM"] = self.chrom
-        vcfdata["ID"] = '.'
-
-        if ("tsk_0" in vcfdata.columns):
-            del vcfdata["tsk_0"]
-
-        # rename tsk style columns to custom names when provided
-        if (self.sample_names is not None):
-            # we rename tsk_1 to first name and so on
-            idx_val = 1
-            name_index = 0
-            while(idx_val < self.samp_num and name_index < len(self.sample_names)):
-                old_name = "tsk_" + str(idx_val)
-                new_name = self.sample_names[name_index]
-                if old_name in vcfdata.columns:
-                    vcfdata.rename(columns={old_name: new_name}, inplace=True)
-                idx_val = idx_val + 1
-                name_index = name_index + 1
-        
-        if (self.outputfile != 'None'):
-            with open(self.outputfile, 'w') as fout:
-                
-                #Replace the existing ##source line with a single version to display version and command
-                for i, line in enumerate(header_lines):
-                    if line.startswith("##source="):
-                        new_source = '##source=tskit 0.6.4, vcfsim 1.0.24.alpha, ' + ' '.join(sys.argv).replace('\t', ' ').strip() + '\n'
-                        header_lines[i] = new_source
-                        break
-
-                #Write all header lines including the modified one
-                for line in header_lines:
-                    fout.write(line)
-
-                #Write the data portion of the VCF
-                csv_buf = io.StringIO()
-                vcfdata.to_csv(csv_buf, index=False, sep='\t', header=True)
-                csv_text = csv_buf.getvalue()
-                fout.write('#')
-                fout.write(csv_text)
+        if k_missing > 0 and n_included > 0:
+            rand_vals = rng.random((n_included, n_real))
+            kth = min(k_missing, n_real - 1)   # kth must be < axis size
+            missing_by_site = np.argpartition(rand_vals, kth, axis=1)[:, :k_missing] + 1
+            # +1: 0-indexed real sample → 1-indexed (tsk_0 at index 0 is never missing)
         else:
-            print(vcfdata.to_string())
-        
+            missing_by_site = np.empty((n_included, 0), dtype=np.intp)
+
+        # stream through variants — one pass gives both genotypes and alleles (its fast!)
+        rows = []
+        site_idx = 0
+        for var in ts.variants():
+            if site_mask[var.site.id]:
+                continue
+
+            gts       = var.genotypes.astype(np.int16)  # (samp_num * ploidy,)
+            alleles   = list(var.alleles)
+            n_alleles = len(alleles)
+            pos       = int(var.site.position) + 1
+
+            # Allele remapping: tsk_0 haplotype 0 determines the reference allele
+            ref_code = int(gts[0])
+            if ref_code != 0 and ref_code < n_alleles:
+                remap = np.arange(n_alleles, dtype=np.int16)
+                remap[0]        = n_alleles - 1
+                remap[ref_code] = 0
+                for j in range(1, n_alleles):
+                    if remap[j] == j:
+                        remap[j] = j - 1 if j > ref_code else j
+                gts      = remap[gts]
+                new_ref  = alleles[ref_code]
+                new_alts = [alleles[j] for j in range(1, n_alleles) if j != ref_code] + [alleles[0]]
+            else:
+                new_ref  = alleles[0]
+                new_alts = list(alleles[1:])
+
+            # apply missing: mark selected samples' haplotypes with -1 sentinel
+            missing_samps = missing_by_site[site_idx]
+            if len(missing_samps) > 0:
+                hap_idx = np.concatenate([
+                    np.arange(s * self.ploidy, (s + 1) * self.ploidy, dtype=np.intp)
+                    for s in missing_samps
+                ])
+                gts[hap_idx] = -1
+
+            # drop allele codes unused by any non-missing sample
+            used_alts = sorted(set(int(g) for g in gts if g >= 1))
+            if used_alts:
+                max_code = max(used_alts)
+                compact  = np.zeros(max_code + 1, dtype=np.int16)
+                for new_i, old_i in enumerate(used_alts, 1):
+                    compact[old_i] = new_i
+                valid = gts >= 0
+                gts   = np.where(valid, compact[np.clip(gts, 0, max_code)], np.int16(-1))
+                alt_str = ','.join(new_alts[c - 1] for c in used_alts)
+            else:
+                gts[gts > 0] = 0
+                alt_str = '.'
+
+            # build GT strings for real samples (tsk_0 occupies positions 0..ploidy-1)
+            real_gts    = gts[self.ploidy:].reshape(n_real, self.ploidy)
+            missing_set = set(int(m) for m in missing_samps)
+            gt_fields   = [
+                self.change_missing if s in missing_set
+                else '|'.join(str(int(h)) for h in haps)
+                for s, haps in enumerate(real_gts, 1)
+            ]
+
+            rows.append('\t'.join(
+                [self.chrom, str(pos), '.', new_ref, alt_str, '.', 'PASS', '.', 'GT']
+                + gt_fields
+            ) + '\n')
+            site_idx += 1
+
+        if self.outputfile != 'None':
+            with open(self.outputfile, 'w') as out:
+                out.write(header_text)
+                out.writelines(rows)
+        else:
+            sys.stdout.write(header_text + ''.join(rows))
+
     def make_population_file(self):
         np.random.seed(self.randoseed)
         file = open(self.samp_file, "a")
@@ -302,9 +219,6 @@ class MyVcfSim:
         file.close()
 
     def simulate_vcfs(self):
-        np.random.seed(self.randoseed)
-
-
         if self.population_mode == 1:
             #same as always
             ts = msprime.sim_ancestry(samples=[msprime.SampleSet(self.samp_num, ploidy=self.ploidy)], population_size=self.pop_num, random_seed=self.randoseed, sequence_length=self.site_size)
@@ -315,7 +229,7 @@ class MyVcfSim:
             demography.add_population(name="B", initial_size=self.pop_num)
             demography.add_population(name="C", initial_size=self.pop_num * 2)
             demography.add_population_split(time=self.time, derived=["A", "B"], ancestral="C")
-            
+
             #Split the total number of samples into two groups: A and B
             #We intentionally *do not* simulate samples from C (the ancestral population)
             #This ensures that all samples come from the derived populations A and B
@@ -323,7 +237,7 @@ class MyVcfSim:
             nA = (self.samp_num-1) // 2  #Half of the samples (rounded down) from population A
             nB = (self.samp_num-1) - nA  #The remaining samples from population B
             samples = [msprime.SampleSet(nA+1, population="A", ploidy=self.ploidy), msprime.SampleSet(nB, population="B", ploidy=self.ploidy)]
-            
+
             ts = msprime.sim_ancestry(samples=samples, demography=demography, random_seed=self.randoseed, sequence_length=self.site_size)
 
         difference_counter = range(self.site_size)
