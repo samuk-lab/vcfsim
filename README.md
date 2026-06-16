@@ -4,6 +4,10 @@ vcfsim is a command-line tool for generating simulated VCF's (variant call forma
 ## Authors 
 Paimon Goulart (UC Riverside), Kieran Samuk (UC Riverside)
 
+## Documentation
+
+The full documation for vcf is available here: [https://vcfsim.readthedocs.io/](https://vcfsim.readthedocs.io/)
+
 ## Installation
 First create and activate a conda environment for vcfsim:
 
