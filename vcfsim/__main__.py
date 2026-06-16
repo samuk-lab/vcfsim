@@ -7,7 +7,15 @@ import argparse
 from .SimulatorClass import MyVcfSim
 import warnings
 
-def multiple_chrom(chromfilename = 'input.txt', seed = 1234, foldername = 'PixyFolder', percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000, hmm_baseline=None, hmm_multiplier=None, hmm_p_good_to_bad=None, hmm_p_bad_to_good=None):
+def _strip_vcf_header(lines):
+    """Return the body of a VCF (everything after the #CHROM line)."""
+    for idx, ln in enumerate(lines):
+        if ln.startswith('#CHROM'):
+            return lines[idx+1:]
+    return lines
+
+
+def multiple_chrom(chromfilename = 'input.txt', seed = 1234, foldername = 'PixyFolder', percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000, hmm_baseline=None, hmm_multiplier=None, hmm_p_good_to_bad=None, hmm_p_bad_to_good=None, gvcf_output = False):
     
     f = open(chromfilename, "r")
 
@@ -61,27 +69,26 @@ def multiple_chrom(chromfilename = 'input.txt', seed = 1234, foldername = 'PixyF
         sys.exit(0)
 
     for i in range(len(chromlist)):
-        sim = MyVcfSim(chromlist[i], lengthlist[i], ploidylist[i], nelist[i], mulist[i], percentmissing, percentsitemissing, seed, chromlist[i], samp_num, 'population.txt', 'vcf', sample_names, population_mode, time, hmm_baseline, hmm_multiplier, hmm_p_good_to_bad, hmm_p_bad_to_good)
-        
+        sim = MyVcfSim(chromlist[i], lengthlist[i], ploidylist[i], nelist[i], mulist[i], percentmissing, percentsitemissing, seed, chromlist[i], samp_num, 'population.txt', 'vcf', sample_names, population_mode, time, hmm_baseline, hmm_multiplier, hmm_p_good_to_bad, hmm_p_bad_to_good, gvcf_output)
+
         sim.simulate_vcfs()
-    
+
     with open(outputfile, "w") as f:
         pass
 
     for i in range(len(chromlist)):
-        if i == 0:
-            with open(chromlist[i], 'r') as source:
-                lines = source.readlines()
-            with open(outputfile, 'a') as destination:
-                destination.writelines(lines)
-        else:
-            with open(chromlist[i], 'r') as source:
-                lines = source.readlines()
-            with open(outputfile, 'a') as destination:
-                destination.writelines(lines[6:])
+        with open(chromlist[i], 'r') as source:
+            lines = source.readlines()
+        if i != 0:
+            # drop the per-chrom header so it isn't repeated in the merged file;
+            # locate #CHROM dynamically since the header length depends on flags
+            # like --gvcf_output.
+            lines = _strip_vcf_header(lines)
+        with open(outputfile, 'a') as destination:
+            destination.writelines(lines)
         os.remove(chromlist[i])
 
-def vcf_simulator(chrom = 1, amountofruns = 1, seed = 1234, foldername = 'PixyFolder', sitesize = 10000, ploidy = 2, population = 1700000, mutationrate = 0.0000000055, percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000, hmm_baseline=None, hmm_multiplier=None, hmm_p_good_to_bad=None, hmm_p_bad_to_good=None):
+def vcf_simulator(chrom = 1, amountofruns = 1, seed = 1234, foldername = 'PixyFolder', sitesize = 10000, ploidy = 2, population = 1700000, mutationrate = 0.0000000055, percentmissing = 0, percentsitemissing = 0, outputfile = 'myvcftest', samp_num = 20, sample_names = None, population_mode = 1, time = 1000, hmm_baseline=None, hmm_multiplier=None, hmm_p_good_to_bad=None, hmm_p_bad_to_good=None, gvcf_output = False):
     
     # when custom sample names are provided we set sample size from the names
     if sample_names is not None:
@@ -101,7 +108,7 @@ def vcf_simulator(chrom = 1, amountofruns = 1, seed = 1234, foldername = 'PixyFo
         else:
             outputfilename = 'None'
             
-        sim = MyVcfSim(chrom, sitesize, ploidy, population, mutationrate, percentmissing, percentsitemissing, seed, outputfilename, samp_num, 'population.txt', 'vcf', sample_names, population_mode, time,  hmm_baseline, hmm_multiplier, hmm_p_good_to_bad, hmm_p_bad_to_good)
+        sim = MyVcfSim(chrom, sitesize, ploidy, population, mutationrate, percentmissing, percentsitemissing, seed, outputfilename, samp_num, 'population.txt', 'vcf', sample_names, population_mode, time,  hmm_baseline, hmm_multiplier, hmm_p_good_to_bad, hmm_p_bad_to_good, gvcf_output)
 
         sim.simulate_vcfs()
         seed+=1
@@ -133,6 +140,8 @@ def main():
     optional.add_argument('--output_file', nargs = '?', help = 'Filename of outputed vcf, will automatically be followed by seed', required = False)    
 
     optional.add_argument('--chromosome_file', nargs = '?', help = 'Specified file for multiple chromosome inputs', required = False)
+
+    optional.add_argument('--gvcf_output', action='store_true', help='Emit a GVCF-style VCF: maximal runs of consecutive invariant sites with identical per-sample GT are collapsed into a single block record (ALT=<NON_REF>, INFO=END=<last_pos>)', required=False)
 
     optional.add_argument('--population_mode', type=int, nargs='?', help='1 = single population (default), 2 = population C splits into A and B at given time', required=False)
     optional.add_argument('--div_time', type=int, nargs='?', help='Divergence time of split (only used if --population_mode is 2)', required=False)
@@ -240,7 +249,7 @@ def main():
         else:
             effective_samp_num = args.sample_size
 
-        multiple_chrom(chromfilename = args.chromosome_file, seed = args.seed, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = effective_samp_num, sample_names = custom_names, population_mode = population_mode, time = time_value, hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_low_to_high, hmm_p_bad_to_good=args.hmm_p_high_to_low)
+        multiple_chrom(chromfilename = args.chromosome_file, seed = args.seed, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = effective_samp_num, sample_names = custom_names, population_mode = population_mode, time = time_value, hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_low_to_high, hmm_p_bad_to_good=args.hmm_p_high_to_low, gvcf_output=args.gvcf_output)
     
     elif (args.chromosome_file is None and (args.chromosome is None or args.replicates is None or args.sequence_length is None
                                       or args.ploidy is None or args.Ne is None or args.mu is None)):
@@ -258,7 +267,7 @@ def main():
         print("Error: Output_file must be a string")
         
     else:
-        vcf_simulator(chrom = args.chromosome , amountofruns = args.replicates, seed = args.seed, sitesize = args.sequence_length, ploidy = args.ploidy, population = args.Ne, mutationrate = args.mu, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = args.sample_size, sample_names = custom_names, population_mode = population_mode, time = time_value,  hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_low_to_high, hmm_p_bad_to_good=args.hmm_p_high_to_low)
+        vcf_simulator(chrom = args.chromosome , amountofruns = args.replicates, seed = args.seed, sitesize = args.sequence_length, ploidy = args.ploidy, population = args.Ne, mutationrate = args.mu, percentmissing = args.percent_missing_sites, percentsitemissing = args.percent_missing_genotypes, outputfile = args.output_file, samp_num = args.sample_size, sample_names = custom_names, population_mode = population_mode, time = time_value,  hmm_baseline=args.hmm_baseline, hmm_multiplier=args.hmm_multiplier, hmm_p_good_to_bad=args.hmm_p_low_to_high, hmm_p_bad_to_good=args.hmm_p_high_to_low, gvcf_output=args.gvcf_output)
     
     #argument checker after to double check
     
