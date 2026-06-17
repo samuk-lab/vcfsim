@@ -4,10 +4,19 @@ import sys
 import io
 
 
+# Header lines required by consumers (e.g. pixy) to parse GVCF block records.
+GVCF_END_INFO_LINE = (
+    '##INFO=<ID=END,Number=1,Type=Integer,Description="Stop position of the interval">\n'
+)
+GVCF_NON_REF_ALT_LINE = (
+    '##ALT=<ID=NON_REF,Description="Represents any possible alternative allele at this location">\n'
+)
+
+
 class MyVcfSim:
 
     def __init__(self, chrom, site_size, ploidy, pop_num, mutationrate, percentmissing, percentsitemissing, randoseed, outputfile, samp_num, samp_file, folder, sample_names = None,
-                 population_mode = 2, time = 1000, hmm_baseline = None, hmm_multiplier = None, hmm_p_good_to_bad = None, hmm_p_bad_to_good = None):
+                 population_mode = 2, time = 1000, hmm_baseline = None, hmm_multiplier = None, hmm_p_good_to_bad = None, hmm_p_bad_to_good = None, gvcf_output = False):
 
         self.chrom = chrom
         self.site_size = site_size
@@ -27,6 +36,7 @@ class MyVcfSim:
         self.hmm_multiplier = hmm_multiplier
         self.hmm_p_good_to_bad = hmm_p_good_to_bad
         self.hmm_p_bad_to_good = hmm_p_bad_to_good
+        self.gvcf_output = bool(gvcf_output)
 
         # store custom names if provided
         if sample_names is not None:
@@ -121,7 +131,10 @@ class MyVcfSim:
         samp_cols  = col_parts[10:]  # skip tsk_0 (index 9)
         if self.sample_names is not None:
             samp_cols = list(self.sample_names)
-        header_text = ''.join(raw[:-1]) + '\t'.join(fixed_cols + samp_cols) + '\n'
+        extra_header = ''
+        if self.gvcf_output:
+            extra_header = GVCF_END_INFO_LINE + GVCF_NON_REF_ALT_LINE
+        header_text = ''.join(raw[:-1]) + extra_header + '\t'.join(fixed_cols + samp_cols) + '\n'
 
         # precompute all per-site missing-sample selections in one NumPy call.
         # using argpartition avoids calling the rando-generator once per site in the loop!
@@ -140,6 +153,11 @@ class MyVcfSim:
         # stream through variants — one pass gives both genotypes and alleles (its fast!)
         rows = []
         site_idx = 0
+        # gVCF collapse state: a maximal run of consecutive invariant sites with
+        # an identical per-sample GT and no positional gap is emitted as one
+        # block record (ALT=<NON_REF>, INFO=END=<last_pos>). Variant sites and
+        # positional gaps (created by site_mask) flush the run.
+        gvcf_pending = None  # dict: first_pos, last_pos, ref, gt_fields
         for var in ts.variants():
             if site_mask[var.site.id]:
                 continue
@@ -197,11 +215,39 @@ class MyVcfSim:
                 for s, haps in enumerate(real_gts, 1)
             ]
 
+            if self.gvcf_output:
+                is_invariant = alt_str == '.'
+                if (
+                    is_invariant
+                    and gvcf_pending is not None
+                    and gt_fields == gvcf_pending['gt_fields']
+                    and pos == gvcf_pending['last_pos'] + 1
+                ):
+                    gvcf_pending['last_pos'] = pos
+                    site_idx += 1
+                    continue
+                if gvcf_pending is not None:
+                    rows.append(self._gvcf_block_line(gvcf_pending))
+                    gvcf_pending = None
+                if is_invariant:
+                    gvcf_pending = {
+                        'first_pos': pos,
+                        'last_pos': pos,
+                        'ref': new_ref,
+                        'gt_fields': gt_fields,
+                    }
+                    site_idx += 1
+                    continue
+
             rows.append('\t'.join(
                 [self.chrom, str(pos), '.', new_ref, alt_str, '.', 'PASS', '.', 'GT']
                 + gt_fields
             ) + '\n')
             site_idx += 1
+
+        if self.gvcf_output and gvcf_pending is not None:
+            rows.append(self._gvcf_block_line(gvcf_pending))
+            gvcf_pending = None
 
         if self.outputfile != 'None':
             with open(self.outputfile, 'w') as out:
@@ -209,6 +255,28 @@ class MyVcfSim:
                 out.writelines(rows)
         else:
             sys.stdout.write(header_text + ''.join(rows))
+
+    def _gvcf_block_line(self, pending):
+        """
+        Render a collapsed run of consecutive invariant sites as a single
+        GVCF block record: ALT=<NON_REF>, INFO=END=<last_pos>. A single-site
+        "block" is rendered the same way so downstream parsers can rely on
+        block records always carrying END.
+        """
+        return '\t'.join(
+            [
+                self.chrom,
+                str(pending['first_pos']),
+                '.',
+                pending['ref'],
+                '<NON_REF>',
+                '.',
+                'PASS',
+                f"END={pending['last_pos']}",
+                'GT',
+            ]
+            + pending['gt_fields']
+        ) + '\n'
 
     def make_population_file(self):
         np.random.seed(self.randoseed)
