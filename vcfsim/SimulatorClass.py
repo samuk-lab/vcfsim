@@ -16,7 +16,7 @@ GVCF_NON_REF_ALT_LINE = (
 class MyVcfSim:
 
     def __init__(self, chrom, site_size, ploidy, pop_num, mutationrate, percentmissing, percentsitemissing, randoseed, outputfile, samp_num, samp_file, folder, sample_names = None,
-                 population_mode = 2, time = 1000, hmm_baseline = None, hmm_multiplier = None, hmm_p_good_to_bad = None, hmm_p_bad_to_good = None, gvcf_output = False):
+                 population_mode = 2, time = 1000, hmm_baseline = None, hmm_multiplier = None, hmm_p_good_to_bad = None, hmm_p_bad_to_good = None, gvcf_output = False, recombination_rate = 0):
 
         self.chrom = chrom
         self.site_size = site_size
@@ -37,6 +37,7 @@ class MyVcfSim:
         self.hmm_p_good_to_bad = hmm_p_good_to_bad
         self.hmm_p_bad_to_good = hmm_p_bad_to_good
         self.gvcf_output = bool(gvcf_output)
+        self.recombination_rate = recombination_rate
 
         # store custom names if provided
         if sample_names is not None:
@@ -289,7 +290,7 @@ class MyVcfSim:
     def simulate_vcfs(self):
         if self.population_mode == 1:
             #same as always
-            ts = msprime.sim_ancestry(samples=[msprime.SampleSet(self.samp_num, ploidy=self.ploidy)], population_size=self.pop_num, random_seed=self.randoseed, sequence_length=self.site_size)
+            ts = msprime.sim_ancestry(samples=[msprime.SampleSet(self.samp_num, ploidy=self.ploidy)], population_size=self.pop_num, random_seed=self.randoseed, sequence_length=self.site_size, recombination_rate=self.recombination_rate)
         else:
             #two population mode: C (size 2x) splits into A and B at self.time
             demography = msprime.Demography()
@@ -306,7 +307,7 @@ class MyVcfSim:
             nB = (self.samp_num-1) - nA  #The remaining samples from population B
             samples = [msprime.SampleSet(nA+1, population="A", ploidy=self.ploidy), msprime.SampleSet(nB, population="B", ploidy=self.ploidy)]
 
-            ts = msprime.sim_ancestry(samples=samples, demography=demography, random_seed=self.randoseed, sequence_length=self.site_size)
+            ts = msprime.sim_ancestry(samples=samples, demography=demography, random_seed=self.randoseed, sequence_length=self.site_size, recombination_rate=self.recombination_rate)
 
         difference_counter = range(self.site_size)
 
