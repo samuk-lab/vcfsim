@@ -281,7 +281,7 @@ class MyVcfSim:
 
     def make_population_file(self):
         np.random.seed(self.randoseed)
-        file = open(self.samp_file, "a")
+        file = open(self.samp_file, "w")
 
         for x in range(0, self.samp_num):
             file.write("tsk_"+ str(x) + "\t1\n")
